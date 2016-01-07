@@ -14,11 +14,13 @@
 
 
 int checkCommand(char * header, char * path);	//prawdza otrzymaną komendę, gdy jest prawidłowa zwraca 1 w przeciwnym zwraca 0
-int readFile(char *path, char * data); 			// czyta plik, zwraca 0 w przypadku powodzenia i -1 w przeciwnym
+int readFile(char *path); 			// czyta plik, zwraca 0 w przypadku powodzenia i -1 w przeciwnym
 void pisz(char * napis);						// pomocnicza funkcja do wypisywania komunikatów
 
 int sockfd;                       // deskryptor gniazda
 int polfd;						  // deskryptor zaakceptowanego gniazda
+
+char *data;						// dane z pliku do wysłania
 
 void print_num(int n){
 	char cyfra[1];
@@ -35,7 +37,7 @@ void test(char *napis) {
 		counter++;
 		napis++;
 	}
-	printf("%d\n", counter);
+	dprintf(1,"%d\n", counter);
 }
 
 
@@ -53,7 +55,6 @@ int main(void){
     struct sockaddr_in server_addr;	// adres serwera 
    	char msg[SIZE];             	// czytana  wiadomosc 
 	char *path;						// scieżka z żadania http
-	char *data;						// dane z pliku do wysłania
 	
 	char respond[SIZE];				// przechowuje całą odpowiedź serwera łącznie z nagłówkiem
 
@@ -79,7 +80,7 @@ int main(void){
 		path = calloc(SIZE, sizeof(char));
 		if(checkCommand(msg, path) == 1) {
 			data = calloc(1025, sizeof(char));
-			readFile(path, data);
+			readFile(path);
 			sprintf(respond, HEAD, strlen(data), "text/html");
 			
 			write(polfd, respond, strlen(respond));
@@ -119,7 +120,7 @@ int checkCommand(char * header, char * path){
 	return 0; // zwraca 0 gdy żądanie nie posiada HTTP/1.0 lub HTTP/1.1
 }
 
-int readFile(char *path, char *data) {
+int readFile(char *path) {
 
 	int data_size = DATA_SIZE;						// początkowy rozmiar buffora 
 	char buff[BUFF_SIZE];							// buffor do którego zapisywane są dane z pliku
@@ -142,9 +143,10 @@ int readFile(char *path, char *data) {
 		}
 		
 		strncat(data, buff, 1024);
-		
 		memset(buff,0,strlen(buff)); // czyszcenie bufora przed ponownym użyciem
 	}
+	
+	test(data);
 		
 	close(fd);
 	
