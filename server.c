@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <stdlib.h>  	/* calloc */
 #include <fcntl.h> 		/* dla czytania z pliku */
+#include <stdio.h>
 
 #define SIZE 1024								// podstawowy rozmiar stringa
 #define DATA_SIZE 1025							// podstawowy rommiar wczytywanego pliku
@@ -14,7 +15,6 @@
 
 int checkCommand(char * header, char * path);	//prawdza otrzymaną komendę, gdy jest prawidłowa zwraca 1 w przeciwnym zwraca 0
 int readFile(char *path, char * data); 			// czyta plik, zwraca 0 w przypadku powodzenia i -1 w przeciwnym
-int sendFile(char *path); 			// czyta plik i wysyła do klienta
 void pisz(char * napis);						// pomocnicza funkcja do wypisywania komunikatów
 
 int sockfd;                       // deskryptor gniazda
@@ -28,6 +28,17 @@ void print_num(int n){
 		write(1,cyfra, 1);
 	}
 }
+
+void test(char *napis) {
+	int counter = 0;
+	while(*napis != '\0') {
+		counter++;
+		napis++;
+	}
+	printf("%d\n", counter);
+}
+
+
 
 // szablon nagłówka odpowiedzi
 const char HEAD[] = "HTTP/1.0 200 OK\n\
@@ -68,14 +79,15 @@ int main(void){
 		path = calloc(SIZE, sizeof(char));
 		if(checkCommand(msg, path) == 1) {
 			data = calloc(1025, sizeof(char));
-			// readFile(path, data);
+			readFile(path, data);
 			sprintf(respond, HEAD, strlen(data), "text/html");
 			
 			write(polfd, respond, strlen(respond));
-			// write(polfd, data, strlen(data));
-			sendFile(path);
+			write(polfd, data, strlen(data));
 			
+			write(1, "Przed\n", strlen("Przed\n"));
 			free(data);
+			write(1, "Po\n", strlen("Po\n"));
 		}
 		free(path);
 		close(polfd);
@@ -107,10 +119,10 @@ int checkCommand(char * header, char * path){
 	return 0; // zwraca 0 gdy żądanie nie posiada HTTP/1.0 lub HTTP/1.1
 }
 
-int readFile(char *path, char * data) {
+int readFile(char *path, char *data) {
 
-	int data_size = DATA_SIZE;							// początkowy rozmiar buffora 
-	char *buff = calloc(BUFF_SIZE, sizeof(char));	// buffor do którego zapisywane są dane z pliku
+	int data_size = DATA_SIZE;						// początkowy rozmiar buffora 
+	char buff[BUFF_SIZE];							// buffor do którego zapisywane są dane z pliku
 	
 	int all_readed = 0;								// całkowita liczba przecztanych znaków
 	int readed;										// liczba przecztanych znaków
@@ -125,37 +137,21 @@ int readFile(char *path, char * data) {
 		all_readed += readed;
 				
 		if(all_readed > data_size) {
-			data_size += DATA_SIZE;			
+			data_size += DATA_SIZE;
 			data = (char*) realloc (data, data_size * sizeof(char));
 		}
 		
-		// strcat(data, buff);
+		strncat(data, buff, 1024);
+		
+		memset(buff,0,strlen(buff)); // czyszcenie bufora przed ponownym użyciem
 	}
 		
-	free(buff);
 	close(fd);
 	
 	return 0;
 }
 
-int sendFile(char *path) {
-	char *buff = calloc(BUFF_SIZE, sizeof(char));	// buffor do którego zapisywane są dane z pliku
-	int readed;										// liczba przecztanych znaków
-	
-	int fd = open(path, O_RDONLY);					// otwiera plik tylko do odczytu
-	if (fd < 0) {									// zwraca -1 gdy nie udało się otworzyć pliku
-		pisz("Bląd przy otwieraniu pliku");		
-		return -1;
-	}		
-	
-	while((readed = read(fd, buff, BUFF_SIZE)) != 0) {
-		write(polfd,buff, readed);
-	}
-		
-	free(buff);
-	close(fd);
-	return 0;
-}
+
 
 void pisz(char * napis){
 	write(1, napis, sizeof(napis));	
