@@ -1,26 +1,33 @@
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <string.h>       /* memset() */
-#include <arpa/inet.h>    /* htonl() */
+#include <string.h>       						/* memset() */
+#include <arpa/inet.h>    						/* htonl() */
 #include <unistd.h>
-#include <stdlib.h>  	/* calloc */
-#include <fcntl.h> 		/* dla czytania z pliku */
+#include <stdlib.h>  							/* calloc */
+#include <fcntl.h> 								/* dla czytania z pliku */
 #include <stdio.h>
+#include <signal.h>								/**/
 
 #define SIZE 1024								// podstawowy rozmiar stringa
 #define DATA_SIZE 1025							// podstawowy rommiar wczytywanego pliku
 #define BUFF_SIZE 1024							// podstawowy rozmiar bufora
 
 
-int checkCommand(char * header, char * path);	//prawdza otrzymaną komendę, gdy jest prawidłowa zwraca 1 w przeciwnym zwraca 0
-int readFile(char *path); 			// czyta plik, zwraca 0 w przypadku powodzenia i -1 w przeciwnym
-void pisz(char * napis);						// pomocnicza funkcja do wypisywania komunikatów
+int checkCommand(char * header, char * path);	// sprawdza otrzymaną komendę, gdy jest prawidłowa zwraca 1, w przeciwnym 0
+int readFile(char *path); 						// czyta plik, w przypadku powodzenia zwraca 0,  w przeciwnym -1
 
-int sockfd;                       // deskryptor gniazda
-int polfd;						  // deskryptor zaakceptowanego gniazda
+void onRespond(char * request);					// funkcja obsługująca żądanie kilenta
+void onInterrupt(int signal);					// funkcja wywoływana po otrzymaniu sygnału
 
-char *data;						// dane z pliku do wysłania
+void getExtension(char * path, char * result);
+
+int sockfd;                       				// deskryptor gniazda
+int polfd;						  				// deskryptor zaakceptowanego gniazda
+
+int childpid;									// przechowuje pid pozyskany z forka
+
+char *data;										// dane z pliku do wysłania
 
 void print_num(int n){
 	char cyfra[1];
@@ -42,59 +49,109 @@ void test(char *napis) {
 
 
 
-// szablon nagłówka odpowiedzi
+// szablon nagłówka odpowiedzi pomyślnej
 const char HEAD[] = "HTTP/1.0 200 OK\n\
 	Server: NAZWA_SERWERA\n\
 	Content-Length: %ld\
 	\nConnection: close\
 	\nContent-Type: %s\n\n";
 
+// szablony nagłówka odpowiedzi niepomyślnej
+const char ERROR_HEAD[] = "HTTP/1.1 403 Forbidden\n\
+	Server: NAZWA_SERWERA\n\
+	Content-Length:7\
+	\nConnection: close\
+	\nContent-Type: text\\html\n\nNO FILE";
+
 
 
 int main(void){
     struct sockaddr_in server_addr;	// adres serwera 
-   	char msg[SIZE];             	// czytana  wiadomosc 
-	char *path;						// scieżka z żadania http
 	
-	char respond[SIZE];				// przechowuje całą odpowiedź serwera łącznie z nagłówkiem
+	char request[SIZE];             // przechowuje odebranie żądanie 
 
-    memset(&server_addr, 0, sizeof(server_addr));
+    memset(&server_addr, 0, sizeof(server_addr));		// "zerowanie" struktury sockaddr_in
     server_addr.sin_family = AF_INET;					// IPv4 
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY);	// slucham na wszystkich interfejsach 
-	server_addr.sin_port = htons(9080);					// slucham na porcie 12211 
+	server_addr.sin_port = htons(9080);					// slucham na porcie 9080 
     
-    // tworze gniazdo - na raznie nie zwiazane z zadnym portem/adresem 
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
     
-    // "podpinam" gniazdo pod konkretny port/adres 
-    bind(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr));
-	listen(sockfd, 5);
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);								// tworze gniazdo - na raznie nie zwiazane z zadnym portem/adresem 
+    bind(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr));		// "podpinam" gniazdo pod konkretny port/adres 
+	listen(sockfd, 5);														// próbuje nawiązać połączenie z serwerem
+	
+	struct sigaction sa;
+	sa.sa_handler = onInterrupt;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+	
+	sigaction(SIGINT, &sa, NULL);
 
-    // teraz gniazdo jest gotowe i moge czytac dane 
+
     while(1){
-		polfd = accept(sockfd, NULL, NULL);
-        read(polfd, msg, 1024);
-		
-		write(1, msg, strlen(msg)); // wyświetlanie zapytań klienta na ekranie
-		
-		path = calloc(SIZE, sizeof(char));
-		if(checkCommand(msg, path) == 1) {
-			data = calloc(1025, sizeof(char));
-			readFile(path);
-			sprintf(respond, HEAD, strlen(data), "text/html");
-			
-			write(polfd, respond, strlen(respond));
-			write(polfd, data, strlen(data));
-			
-			write(1, "Przed\n", strlen("Przed\n"));
-			free(data);
-			write(1, "Po\n", strlen("Po\n"));
+		polfd = accept(sockfd, NULL, NULL);							// akcepotowanie połączenia i uzyskanie deskryptora
+        read(polfd, request, 1024);									// zapisywanie otrzymanego żądania do zmiennej request
+		write(1, request, strlen(request)); 						// wypisanie otrzymanego żądania w konsoli
+		 if((childpid =fork()) == 0) {
+			onRespond(request);										// stworzenie potomka który obsłuży żądanie
+			close(polfd);
+			close(sockfd);
+			exit(0);												// zakończenie procesu po wykonaniu zadania
+		} else {
+			close(polfd);											// zamknięcie nie potrzebnego deskryptora
+			// tutaj nic nie robi;
 		}
-		free(path);
-		close(polfd);
     }
 
     return 0;
+}
+
+void onRespond(char * request) {
+	char respond[SIZE];											// przechowuje całą odpowiedź serwera łącznie z nagłówkiem
+	char *path;													// scieżka z żądania http
+	
+	path = calloc(SIZE, sizeof(char));							// wyświetlanie zapytań klienta na ekranie
+	if(checkCommand(request, path) == 1) {
+		data = calloc(1025, sizeof(char));
+		if(readFile(path) == 0) {
+			// char last[5];
+// 			getExtension(path, last);
+// 			printf("%s", last);
+			
+			sprintf(respond, HEAD, strlen(data), "text/html");
+			write(polfd, respond, strlen(respond));
+			write(polfd, data, strlen(data));
+		} else {
+			write(polfd, ERROR_HEAD, strlen(ERROR_HEAD));
+		}
+		free(data);
+	}
+	free(path);
+}
+
+void getExtension(char * path, char * result){
+	char tmp[5];
+	while(*path != '.' && *path != '\n') {
+		path++;
+	}
+	
+	int i = 0;
+	while(*path != '\0') {
+		*tmp = *path;
+		tmp[i] = *path;
+		path++;
+		i++;
+	}
+	
+	strcpy(result, tmp);
+}
+
+
+
+void onInterrupt(int signal){
+	close(sockfd);
+	kill(childpid, SIGTERM);
+	exit(0);
 }
 
 int checkCommand(char * header, char * path){
@@ -129,11 +186,10 @@ int readFile(char *path) {
 	int readed;										// liczba przecztanych znaków
 	
 	int fd = open(path, O_RDONLY);					// otwiera plik tylko do odczytu
-	if (fd < 0) {									// zwraca -1 gdy nie udało się otworzyć pliku
-		pisz("Bląd przy otwieraniu pliku");		
-		return -1;
-	}		
 	
+	if (fd < 0) 
+		return -1;									// zwraca -1 gdy nie udało się otworzyć pliku	
+		
 	while((readed = read(fd, buff, BUFF_SIZE)) != 0) {
 		all_readed += readed;
 				
@@ -143,20 +199,15 @@ int readFile(char *path) {
 		}
 		
 		strncat(data, buff, 1024);
-		memset(buff,0,strlen(buff)); // czyszcenie bufora przed ponownym użyciem
+		memset(buff,0,strlen(buff)); 				// czyszcenie bufora przed ponownym użyciem
 	}
 	
-	test(data);
-		
+	test(data);		
 	close(fd);
 	
 	return 0;
 }
 
 
-
-void pisz(char * napis){
-	write(1, napis, sizeof(napis));	
-}
 
 
