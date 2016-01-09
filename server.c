@@ -7,7 +7,7 @@
 #include <stdlib.h>  							/* calloc */
 #include <fcntl.h> 								/* dla czytania z pliku */
 #include <stdio.h>
-#include <signal.h>								/**/
+#include <signal.h>								/*do obsługi sygnałów*/
 
 #define SIZE 1024								// podstawowy rozmiar stringa
 #define DATA_SIZE 1025							// podstawowy rommiar wczytywanego pliku
@@ -20,14 +20,22 @@ int readFile(char *path); 						// czyta plik, w przypadku powodzenia zwraca 0, 
 void onRespond(char * request);					// funkcja obsługująca żądanie kilenta
 void onInterrupt(int signal);					// funkcja wywoływana po otrzymaniu sygnału
 
-void getExtension(char * path, char * result);
+int getExtension(char * path);
 
 int sockfd;                       				// deskryptor gniazda
 int polfd;						  				// deskryptor zaakceptowanego gniazda
 
 int childpid;									// przechowuje pid pozyskany z forka
 
-char *data;										// dane z pliku do wysłania
+char * data;									// dane z pliku do wysłania
+
+char * extensions[] = {
+	".gif", ".jpg",".jpeg" ".png", ".zip",
+ ".gz", ".tar", ".htm", ".html"};
+ 
+char * filetypes[] = {
+ 	"image/gif", "image/jpeg","image/jpeg", "image/png", "image/zip",
+  "image/gz", "image/tar", "text/html", "text/html"};
 
 void print_num(int n){
 	char cyfra[1];
@@ -114,11 +122,8 @@ void onRespond(char * request) {
 	if(checkCommand(request, path) == 1) {
 		data = calloc(1025, sizeof(char));
 		if(readFile(path) == 0) {
-			// char last[5];
-// 			getExtension(path, last);
-// 			printf("%s", last);
-			
-			sprintf(respond, HEAD, strlen(data), "text/html");
+			int type = getExtension(path);
+			sprintf(respond, HEAD, strlen(data), filetypes[type]);
 			write(polfd, respond, strlen(respond));
 			write(polfd, data, strlen(data));
 		} else {
@@ -129,21 +134,20 @@ void onRespond(char * request) {
 	free(path);
 }
 
-void getExtension(char * path, char * result){
-	char tmp[5];
-	while(*path != '.' && *path != '\n') {
+int getExtension(char * path){
+	path++;
+	while(*path != '\0' && *path != '.') {
 		path++;
 	}
 	
-	int i = 0;
-	while(*path != '\0') {
-		*tmp = *path;
-		tmp[i] = *path;
-		path++;
-		i++;
+	int i;
+	for(i = 0; i<9; i++) {
+		if(strcmp(path, extensions[i]) == 0){
+			return i;
+		}
 	}
 	
-	strcpy(result, tmp);
+	return 8; // w przypadku nie znanego rozszerzenia oznacza jako text/html
 }
 
 
@@ -206,6 +210,43 @@ int readFile(char *path) {
 	close(fd);
 	
 	return 0;
+}
+
+int sendFile(char *path) {
+
+	char buff[BUFF_SIZE];							// buffor do którego zapisywane są dane z pliku
+	int readed;										// liczba przecztanych znaków
+	
+	int fd = open(path, O_RDONLY);					// otwiera plik tylko do odczytu
+	
+	if (fd < 0) 
+		return -1;									// zwraca -1 gdy nie udało się otworzyć pliku	
+		
+	while((readed = read(fd, buff, BUFF_SIZE)) != 0) {
+		write(polfd, buff, readed);
+		memset(buff,0,strlen(buff)); 				// czyszcenie bufora przed ponownym użyciem
+	}
+		
+	close(fd);
+	
+	return 0;
+}
+
+int getFileSize(char *path){
+	int result = 0;											// całkowita liczba przecztanych znaków
+	int readed;												// liczba przecztanych znaków
+	
+	char buff[BUFF_SIZE];									// buffor do czytania pliku;
+	
+	int fd = open(path, O_RDONLY);							// otwiera plik tylko do odczyt
+	if (fd < 0) 
+		return -1;											// zwraca -1 gdy nie udało się otworzyć pliku	
+		
+	while((readed = read(fd, buff, BUFF_SIZE)) != 0) {
+		result += readed;									// dodawanie przeczytanych danych do zmiennej przechowującej ogólny rozmiar
+	}
+
+	return result;
 }
 
 
