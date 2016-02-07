@@ -79,18 +79,19 @@ int main(void){
 
 
     while(1){
-		polfd = accept(sockfd, NULL, NULL);
-    read(polfd, request, 1024);
-		write(1, request, strlen(request));
-		 if((childpid =fork()) == 0) {
-			onRespond(request);
-			close(polfd);
-			close(sockfd);
-			exit(0);
-		} else {
-			close(polfd);
-
-		}
+			polfd = accept(sockfd, NULL, NULL);
+			memset(request, 0, sizeof(request));
+	    read(polfd, request, 1024);
+			write(1, request, strlen(request));
+			write(1,"\n\n", sizeof("\n\n"));
+			 if((childpid =fork()) == 0) {
+				onRespond(request);
+				close(polfd);
+				close(sockfd);
+				exit(0);
+			} else {
+				close(polfd);
+			}
     }
 
     return 0;
@@ -130,7 +131,6 @@ int getExtension(char * path){
 
 	return 8;
 }
-
 
 
 void onInterrupt(int signal){
