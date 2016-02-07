@@ -57,7 +57,9 @@ const char ERROR_HEAD[] = "HTTP/1.1 403 Forbidden\n\
 int main(void){
     struct sockaddr_in server_addr;	// adres serwera 
 	
-	char request[SIZE];	// przechowuje odebranie żądanie 
+	char request[SIZE];	// przechowuje odebranie żądanie
+	char buff[255]; 
+	int rozmiar;
 
     memset(&server_addr, 0, sizeof(server_addr)); // "zerowanie" struktury sockaddr_in
     server_addr.sin_family = AF_INET; // IPv4 
@@ -79,7 +81,10 @@ int main(void){
 
     while(1){
 		polfd = accept(sockfd, NULL, NULL);	// akcepotowanie połączenia i uzyskanie deskryptora
-        read(polfd, request, 1024);	// zapisywanie otrzymanego żądania do zmiennej request
+		memset(request, 0, sizeof(request));
+		while((rozmiar = read(polfd, buff, 255)) != 0) {
+			write(1, buff, rozmiar);
+		}
 		write(1, request, strlen(request)); // wypisanie otrzymanego żądania w konsoli
 		 if((childpid =fork()) == 0) {
 			onRespond(request);	// stworzenie potomka który obsłuży żądanie

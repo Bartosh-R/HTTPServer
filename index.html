@@ -1,10 +1,128 @@
-<!DOCTYPE html>
-<html>
-<body>
+<style>
+* {
+		margin: 0;
+		padding: 0;
+		font-family: "Source Sans Pro", Helvetica, Arial, sans-serif;
+		font-weight: 300;
+}
 
-<h1>My first site on my own server</h1>
+p,
+a,
+ul,
+ol,
+li {
+		font-size: 13px;
+}
 
-<p>Something boring but what can i do</p>
+a {
+		text-decoration: none;
+		color: #f8f8f8;
+}
+/*containers*/
 
-</body>
-</html>
+body {
+		background-color: #242424;
+}
+
+header {
+		height: 25px;
+		width: 100%;
+		background-color: #3c3f41;
+		font-size: 7px;
+		color: #c5c5c5;
+		padding-top: 10px;
+}
+
+
+
+/*classes*/
+
+.button {
+		border-radius: 50%;
+		position: fixed;
+		bottom: 30;
+		right: 30;
+		width: 50px;
+		height: 50px;
+		background-color: white;
+}
+
+.page {
+		padding: 10px;
+		margin-left: 50px;
+		color: #f8f8f8;
+}
+
+.page p {
+		color: #fff;
+		font-size: 13.5px;
+		font-family: monospace;
+}
+
+
+#color {
+		color: #d28445;
+}
+</style>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+		// może przydać się póżniej
+});
+
+function lineCount() {
+		var pages = document.querySelectorAll("p");
+		for (var i = 0; i < pages.length; i++) {
+				var page = "#page-" + (i + 1);
+				if (s(page).style.display == "block") {
+						if (s(page).children.length <= 1) {
+								s("footer span").innerHTML = s(page).children.length + " " + "Line";
+						} else {
+								s("footer span").innerHTML = s(page).children.length + " " + "Lines";
+						}
+				}
+		}
+}
+
+//querySelector alternative: s();
+function s(e) {
+		return document.querySelector(e);
+}
+
+function post(path, params, method) {
+    method = method || "post"; // Set method to post by default if not specified.
+
+    // The rest of this code assumes you are not using a library.
+    // It can be made less wordy if you use one.
+    var form = document.createElement("form");
+    form.setAttribute("method", method);
+    form.setAttribute("action", path);
+
+    for(var key in params) {
+        if(params.hasOwnProperty(key)) {
+            var hiddenField = document.createElement("input");
+            hiddenField.setAttribute("type", "hidden");
+            hiddenField.setAttribute("name", key);
+            hiddenField.setAttribute("value", params[key]);
+            form.appendChild(hiddenField);
+         }
+    }
+
+    document.body.appendChild(form);
+    form.submit();
+}
+
+function buga() {
+	post('/', {name: 'Johnny Bravo'});
+}
+
+</script>
+
+
+<div class="page" contenteditable="true" spellcheck="false" onkeypress="lineCount();" style="outline: none">
+	<p>Feel free to make some changes!</p>
+</div>
+
+<div class="button" onclick="buga();">
+</div>
+
